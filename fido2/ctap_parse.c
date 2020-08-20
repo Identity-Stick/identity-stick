@@ -15,6 +15,7 @@
 #include "cose_key.h"
 #include "util.h"
 #include "log.h"
+#include "identity_stick.h"
 
 extern struct _getAssertionState getAssertionState;
 
@@ -538,6 +539,8 @@ uint8_t parse_options(CborValue * val, uint8_t * rk, uint8_t * uv, uint8_t * up)
             ret = cbor_value_get_boolean(&map, &b);
             check_ret(ret);
             printf1(TAG_GA, "uv: %d\r\n",b);
+            printf1(TAG_RED, "uv: %d\r\n",b);
+
             *uv = b;
         }
         else if (strncmp(key, "up",2) == 0)
@@ -631,6 +634,118 @@ uint8_t ctap_parse_hmac_secret(CborValue * val, CTAP_hmac_secret * hs)
     return 0;
 }
 
+uint8_t ctap_parse_identity_message(CborValue * val, CTAP_identity_message * id){
+    size_t map_length;
+    CborValue map;
+    unsigned int i;
+    uint8_t parsed_count = 0;
+
+    int key;
+    int ret; 
+
+    uint8_t rcvd_data[24];
+    size_t sz;
+
+   if (cbor_value_get_type(val) != CborMapType)
+    {
+        printf2(TAG_ERR,"Error, expecting CborMapType for indentity-stick map, got %s\n", cbor_value_get_type_string(val));
+        return CTAP2_ERR_INVALID_CBOR_TYPE;
+    } 
+
+    ret = cbor_value_enter_container(val,&map);
+    check_ret(ret);
+
+    ret = cbor_value_get_map_length(val, &map_length);
+    check_ret(ret);
+
+    for (i = 0; i < map_length; i++)
+    {   
+        int msg_option;
+        if (cbor_value_get_type(&map) != CborIntegerType)
+        {
+            printf2(TAG_ERR,"Error, expecting CborIntegerTypefor indentity-stick map key, got %s\n", cbor_value_get_type_string(&map));
+            return CTAP2_ERR_INVALID_CBOR_TYPE;
+        }
+        ret = cbor_value_get_int(&map, &key);
+        check_ret(ret);
+
+        ret = cbor_value_advance(&map);
+        check_ret(ret);
+
+        switch(key)
+        {
+
+            case EXT_IDENTITY_MSG_TYPE:
+                if (cbor_value_get_type(&map) != CborIntegerType)
+                {
+                    printf2(TAG_ERR,"Error, expecting CborIntegerTypefor indentity-stick map key, got %s\n", cbor_value_get_type_string(&map));
+                    return CTAP2_ERR_INVALID_CBOR_TYPE;
+                }
+                ret = cbor_value_get_int(&map, &msg_option);
+                check_ret(ret);
+
+                switch(msg_option){
+
+                    case EXT_IDENTITY_MSG_INFO :
+                        id->type = EXT_IDENTITY_MSG_INFO;
+                        break;
+                    case EXT_IDENTITY_MSG_REQUEST:
+                        id->type = EXT_IDENTITY_MSG_REQUEST;
+                        break;
+                    case EXT_IDENTITY_MSG_CHALLENGE:
+                        id->type = EXT_IDENTITY_MSG_CHALLENGE;
+                        break;
+                    case EXT_IDENTITY_MSG_DATA:
+                        id->type = EXT_IDENTITY_MSG_DATA;
+                        break;
+                }
+                printf1(TAG_CTAP, "Ext.(identity-stick) || MSG_TYPE %d:%d \r\n", key, msg_option);
+                parsed_count++;
+                break;
+            case EXT_IDENTITY_MSG_PAYLOAD:
+                if (cbor_value_get_type(&map) != CborTextStringType)
+                {
+                    printf2(TAG_ERR,"Error, expecting CborIntegerType for indentity-stick map key, got %s\n", cbor_value_get_type_string(&map));
+                    return CTAP2_ERR_INVALID_CBOR_TYPE;
+                }
+                sz = sizeof(rcvd_data);
+                ret = cbor_value_copy_text_string(&map, (char *)rcvd_data, &sz, NULL);
+                check_ret(ret);
+                printf1(TAG_CTAP, "Ext.(identity-stick) || MSG_PAYLOAD %d:%s \r\n", key, rcvd_data);
+
+                if(isValidAttribute((const char*)rcvd_data)) {
+                        strcpy((char *)id->data, (const char*) rcvd_data);
+                }else{
+                    printf2(TAG_ERR, "Ext.(identity-stick) || Wrong parameter requested. Got %s.\r\n", rcvd_data);
+                    return CTAP2_ERR_INVALID_OPTION;
+                }
+                
+                printf1(TAG_CTAP, "Ext.(identity-stick) || DATA %d:%s \r\n", key, id->data);
+
+                parsed_count++;
+                break;
+            case EXT_IDENTITY_MSG_OPTION:
+                ret = cbor_value_get_int(&map, &msg_option);
+                check_ret(ret);
+                
+                id->option = msg_option;
+                printf1(TAG_CTAP, "Ext.(identity-stick) || MSG_OPTION %d:%d \r\n", key, msg_option);
+                parsed_count++;
+                break;
+        }
+
+        ret = cbor_value_advance(&map);
+        check_ret(ret);
+    }
+
+    if (parsed_count != 3)
+    {
+        printf2(TAG_ERR, "ctap_parse_identity_message missing parameter.  Got %d.\r\n", parsed_count);
+        return CTAP2_ERR_MISSING_PARAMETER;
+    }
+
+    return 0;
+}
 
 uint8_t ctap_parse_extensions(CborValue * val, CTAP_extensions * ext)
 {
@@ -640,7 +755,6 @@ uint8_t ctap_parse_extensions(CborValue * val, CTAP_extensions * ext)
     int ret;
     unsigned int i;
     bool b;
-
     if (cbor_value_get_type(val) != CborMapType)
     {
         printf2(TAG_ERR,"error, wrong type\n");
@@ -706,6 +820,29 @@ uint8_t ctap_parse_extensions(CborValue * val, CTAP_extensions * ext)
                 printf1(TAG_RED, "warning: credProtect request ignored for being wrong type\r\n");
             }
         }
+        else if (strncmp(key, "identity-stick",14) == 0) {
+            if (cbor_value_get_type(&map) == CborBooleanType)
+            {   
+                ret = cbor_value_get_boolean(&map, &b);
+                check_ret(ret);
+                if(b){
+                    ext->identity_message_present = 1;
+                    ext->identity_message.type = EXT_IDENTITY_MSG_INFO;
+                }
+                printf1(TAG_CTAP, "set identity_message_present to %d\r\n", b, EXT_IDENTITY_MSG_INFO);
+            }
+            else if (cbor_value_get_type(&map) == CborMapType)
+            {
+                ret = ctap_parse_identity_message(&map, &ext->identity_message);
+                check_retr(ret);
+
+                ext->identity_message_present = 1;
+                printf1(TAG_CTAP, "parsed identity_message request\r\n");
+            }
+            else {
+                printf1(TAG_RED, "warning: identity-stick request ignored for being wrong type\r\n");
+            }
+        }
 
         ret = cbor_value_advance(&map);
         check_ret(ret);
@@ -756,7 +893,6 @@ uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encod
         ret = cbor_value_advance(&map);
         check_ret(ret);
         ret = 0;
-
         switch(key)
         {
 
@@ -875,6 +1011,8 @@ uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encod
                 printf1(TAG_MC,"invalid key %d\n", key);
 
         }
+        
+
         if (ret != 0)
         {
             return ret;
@@ -882,7 +1020,6 @@ uint8_t ctap_parse_make_credential(CTAP_makeCredential * MC, CborEncoder * encod
         ret = cbor_value_advance(&map);
         check_ret(ret);
     }
-
     return 0;
 }
 
@@ -1166,7 +1303,8 @@ uint8_t ctap_parse_cred_mgmt(CTAP_credMgmt * CM, uint8_t * request, int length)
 }
 
 uint8_t ctap_parse_get_assertion(CTAP_getAssertion * GA, uint8_t * request, int length)
-{
+{   
+    printf1(TAG_GREEN, "PArsing get assertion\n\r");
     int ret;
     unsigned int i;
     int key;

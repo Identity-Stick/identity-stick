@@ -23,6 +23,7 @@
 #include APP_CONFIG
 #include "wallet.h"
 #include "extensions.h"
+#include "identity_stick.h"
 
 #include "device.h"
 #include "data_migration.h"
@@ -140,10 +141,11 @@ uint8_t ctap_get_info(CborEncoder * encoder)
             check_ret(ret);
         }
 
+        //Information about supported extensions
         ret = cbor_encode_uint(&map, RESP_extensions);
         check_ret(ret);
         {
-            ret = cbor_encoder_create_array(&map, &array, 2);
+            ret = cbor_encoder_create_array(&map, &array, 3);
             check_ret(ret);
             {
                 ret = cbor_encode_text_stringz(&array, "hmac-secret");
@@ -151,6 +153,10 @@ uint8_t ctap_get_info(CborEncoder * encoder)
 
                 ret = cbor_encode_text_stringz(&array, "credProtect");
                 check_ret(ret);
+
+                ret = cbor_encode_text_stringz(&array, "identity-stick");
+                check_ret(ret);
+
             }
             ret = cbor_encoder_close_container(&map, &array);
             check_ret(ret);
@@ -426,6 +432,7 @@ static int ctap_make_extensions(CTAP_extensions * ext, uint8_t * ext_encoder_buf
     uint8_t hmac_secret_output_is_valid = 0;
     uint8_t hmac_secret_requested_is_valid = 0;
     uint8_t cred_protect_is_valid = 0;
+    uint8_t identity_msg_is_valid = 0;
     uint8_t hmac_secret_output[64];
     uint8_t shared_secret[32];
     uint8_t hmac[32];
@@ -504,6 +511,10 @@ static int ctap_make_extensions(CTAP_extensions * ext, uint8_t * ext_encoder_buf
             cred_protect_is_valid = 1;
         }
     }
+    if(ext->identity_message_present){
+        extensions_used += 1;
+        identity_msg_is_valid = 1;
+    }
 
     if (extensions_used > 0)
     {
@@ -524,7 +535,8 @@ static int ctap_make_extensions(CTAP_extensions * ext, uint8_t * ext_encoder_buf
                 }
             }
             if (hmac_secret_requested_is_valid) {
-                {
+                {   
+
                     ret = cbor_encode_text_stringz(&extension_output_map, "hmac-secret");
                     check_ret(ret);
 
@@ -533,12 +545,64 @@ static int ctap_make_extensions(CTAP_extensions * ext, uint8_t * ext_encoder_buf
                 }
             }
             if (cred_protect_is_valid) {
-                {
+                {   
                     ret = cbor_encode_text_stringz(&extension_output_map, "credProtect");
                     check_ret(ret);
 
                     ret = cbor_encode_int(&extension_output_map, ext->cred_protect);
                     check_ret(ret);
+                }
+            }
+            if(identity_msg_is_valid){
+                {
+                    int msg_option;
+
+                    printf1(TAG_GREEN, "Constructing the extension for type: %d\r\n", ext->identity_message.type);
+                    ret = cbor_encode_text_stringz(&extension_output_map, "identity-stick");
+                    check_ret(ret);
+
+                    msg_option = ext->identity_message.type;
+                    switch(msg_option)
+                    {
+                        case EXT_IDENTITY_MSG_INFO:
+                            ret = getAvailableData(ext->identity_message.data);
+                            if(ret < 0){
+                                ret = cbor_encode_int(&extension_output_map, -1);
+                                check_ret(ret);
+                            }else{
+                                ret = cbor_encode_text_stringz(&extension_output_map, (const char*)ext->identity_message.data);
+                                check_ret(ret);
+                            } 
+                            break;
+                        case EXT_IDENTITY_MSG_REQUEST:
+                            ret = cbor_encode_int(&extension_output_map, lenRequestedString((const char*)ext->identity_message.data));
+                            check_ret(ret); 
+                            break;
+                        case EXT_IDENTITY_MSG_CHALLENGE:
+                            ret = cbor_encode_text_stringz(&extension_output_map, "CHALLENGE");
+                            check_ret(ret);
+                            break;
+                        case EXT_IDENTITY_MSG_DATA:
+                            if(ext->identity_message.option >= 0){
+                                ret = nextString((const char*)ext->identity_message.data, ext->identity_message.option, ext->identity_message.data, getPartLength());
+                                if(ret < 0){
+                                    ret = cbor_encode_int(&extension_output_map, -1);
+                                    check_ret(ret);
+                                }else{
+                                    ret = cbor_encode_text_stringz(&extension_output_map, (const char*)ext->identity_message.data);
+                                    check_ret(ret);
+                                }
+                            }else{
+                                ret = cbor_encode_int(&extension_output_map, -1);
+                                check_ret(ret);
+                            }
+                            
+                            break;
+                        default:
+                            printf1(TAG_RED, "warning: identity-stick request ignored for unknown message type\r\n");
+                            break;
+                    }          
+
                 }
             }
             ret = cbor_encoder_close_container(&extensions, &extension_output_map);
@@ -616,8 +680,8 @@ static int ctap_make_auth_data(struct rpId * rp, CborEncoder * map, uint8_t * au
     count = auth_data_update_count(&authData->head);
 
     int but;
-
     but = ctap2_user_presence_test();
+
     if (CTAP2_ERR_PROCESSING == but)
     {
         authData->head.flags = (0 << 0);        // User presence disabled
@@ -957,7 +1021,6 @@ uint8_t ctap_make_credential(CborEncoder * encoder, uint8_t * request, int lengt
     {
         unsigned int ext_encoder_buf_size = sizeof(auth_data_buf) - auth_data_sz;
         uint8_t * ext_encoder_buf = auth_data_buf + auth_data_sz;
-
         ret = ctap_make_extensions(&MC.extensions, ext_encoder_buf, &ext_encoder_buf_size);
         check_retr(ret);
         if (ext_encoder_buf_size)
@@ -1795,7 +1858,7 @@ uint8_t ctap_get_assertion(CborEncoder * encoder, uint8_t * request, int length)
     }
     if (GA.extensions.hmac_secret_present == EXT_HMAC_SECRET_PARSED)
     {
-        printf1(TAG_GA, "hmac-secret is present\r\n");
+        printf1(TAG_GREEN, "hmac-secret is present\r\n");
     }
 
     ret = cbor_encoder_create_map(encoder, &map, map_size);

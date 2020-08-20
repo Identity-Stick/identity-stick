@@ -78,6 +78,18 @@
 #define EXT_CRED_PROTECT_OPTIONAL_WITH_CREDID   0x02
 #define EXT_CRED_PROTECT_REQUIRED               0x03
 
+#define EXT_IDENTITY_MSG_TYPE       0x01
+#define EXT_IDENTITY_MSG_PAYLOAD    0x02
+#define EXT_IDENTITY_MSG_OPTION     0x03
+
+#define EXT_IDENTITY_MSG_INFO       0X01
+#define EXT_IDENTITY_MSG_REQUEST    0X02
+#define EXT_IDENTITY_MSG_CHALLENGE  0X03
+#define EXT_IDENTITY_MSG_DATA       0X04
+
+#define EXT_IDENTITY_OPT_IGNORE     0x01
+#define EXT_IDENTITY_OPT_NEXT       0x02
+
 #define RESP_versions               0x1
 #define RESP_extensions             0x2
 #define RESP_aaguid                 0x3
@@ -248,9 +260,20 @@ typedef struct
 
 typedef struct
 {
+    uint8_t type;
+    int8_t option;
+    char  data[64];
+} CTAP_identity_message;
+
+typedef struct
+{
     uint8_t hmac_secret_present;
     CTAP_hmac_secret hmac_secret;
+
     uint32_t cred_protect;
+
+    uint8_t identity_message_present;
+    CTAP_identity_message identity_message;
 } CTAP_extensions;
 
 typedef struct
