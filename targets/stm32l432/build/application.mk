@@ -8,7 +8,7 @@ SRC += $(DRIVER_LIBS) $(USB_LIB)
 
 # FIDO2 lib
 SRC += ../../fido2/apdu.c ../../fido2/util.c ../../fido2/u2f.c ../../fido2/test_power.c
-SRC += ../../fido2/stubs.c ../../fido2/log.c  ../../fido2/ctaphid.c  ../../fido2/ctap.c
+SRC += ../../fido2/stubs.c ../../fido2/log.c  ../../fido2/ctaphid.c  ../../fido2/identity_stick.c ../../fido2/ctap.c
 SRC += ../../fido2/ctap_parse.c ../../fido2/crypto.c
 SRC += ../../fido2/version.c
 SRC += ../../fido2/data_migration.c
