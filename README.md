@@ -130,13 +130,6 @@ You can find more details in our [documentation](https://docs.solokeys.dev/), in
 Check out our [official documentation](https://docs.solokeys.dev/).
 
 
-# Supported by
-
-The project is a finalist of the <a href= "https://prototypefund.de/">PrototypeFund round 7</a>, see <a href="https://prototypefund.de/project/identity-stick/">our project site</a> for details.
-
-[<img alt="BMBF" src="https://identity-stick.github.io/ressourcen/BMBF_gefîrdert%20vom_deutsch.jpg" height="150">](https://www.bmbf.de/de/software-sprint-freie-programmierer-unterstuetzen-3512.html "BMBF Software Sprint Förderrichtlinie")
-[<img alt="Prototypefund" src="https://i0.wp.com/blog.okfn.org/files/2017/12/22137279_1679687182104997_6759961652435307500_o.jpg" height="150">](https://prototypefund.de "Prototypefund Website")
-
 
 # License
 
@@ -153,8 +146,6 @@ You may use Solo hardware under the terms of either the CERN 1.2 license or CC-B
 All documentation, unless otherwise noted, is licensed under CC-BY-SA.
 You may use Solo documentation under the terms of the CC-BY-SA 4.0 license
 
-
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fsolokeys%2Fsolo.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fsolokeys%2Fsolo?ref=badge_large)
 
 # Supported by
 
